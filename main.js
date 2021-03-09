@@ -167,7 +167,7 @@ function commonHandle(e, context) {
 
   // setu
   if (global.config.bot.setu.enable) {
-    if (sendSetu(context, replyMsg, logger, bot)) return true;
+    if (sendSetu(context, logger)) return true;
   }
 
   // reminder
@@ -176,7 +176,7 @@ function commonHandle(e, context) {
   }
 
   //  反哔哩哔哩小程序
-  antiBiliMiniApp(context, replyMsg);
+  antiBiliMiniApp(context);
 
   return false;
 }
@@ -479,9 +479,10 @@ async function searchImg(context, customDB = -1) {
           if (!snRes.success) success = false;
           if (snRes.lowAcc) snLowAcc = true;
           if (
-            (global.config.bot.useAscii2dWhenLowAcc && snRes.lowAcc && (db === snDB.all || db === snDB.pixiv)) ||
-            (global.config.bot.useAscii2dWhenQuotaExcess && snRes.excess) ||
-            (global.config.bot.useAscii2dWhenFailed && !success)
+            !useWhatAnime &&
+            ((global.config.bot.useAscii2dWhenLowAcc && snRes.lowAcc && (db === snDB.all || db === snDB.pixiv)) ||
+              (global.config.bot.useAscii2dWhenQuotaExcess && snRes.excess) ||
+              (global.config.bot.useAscii2dWhenFailed && !success))
           ) {
             useAscii2d = true;
           }

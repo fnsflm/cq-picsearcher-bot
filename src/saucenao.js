@@ -1,8 +1,7 @@
+import _ from 'lodash';
 import nhentai from './nhentai';
 import getSource from './getSource';
 import CQ from './CQcode';
-// import shorten from './urlShorten/is.gd';
-// import { URL } from 'url';
 import pixivShorten from './urlShorten/pixiv';
 import logError from './logError';
 const Axios = require('./axiosProxy');
@@ -64,6 +63,7 @@ async function doSearch(imgURL, db, debug = false) {
               long_remaining, // 长时剩余
               similarity, // 相似度
               thumbnail, // 缩略图
+              index_id, // 图库
             },
             data: {
               ext_urls,
@@ -79,12 +79,31 @@ async function doSearch(imgURL, db, debug = false) {
           let source = null;
           if (ext_urls) {
             url = ext_urls[0];
-            // 如果结果有多个，优先取danbooru
-            for (let i = 1; i < ext_urls.length; i++) {
-              if (ext_urls[i].indexOf('danbooru') !== -1) url = ext_urls[i];
+            if (index_id === snDB.pixiv) {
+              // 如果结果为 pixiv，尝试找到原始投稿，避免返回盗图者的投稿
+              const pixivResults = data.results.filter(
+                result =>
+                  result.header.index_id === snDB.pixiv &&
+                  _.get(result, 'data.ext_urls[0]') &&
+                  Math.abs(result.header.similarity - similarity) < 5
+              );
+              if (pixivResults.length > 1) {
+                const resultData = _.minBy(pixivResults, result =>
+                  parseInt(result.data.ext_urls[0].match(/\d+/).toString())
+                ).data;
+                url = resultData.ext_urls[0];
+                title = resultData.title;
+                member_name = resultData.member_name;
+                member_id = resultData.member_id;
+              }
+            } else if (ext_urls.length > 1) {
+              // 如果结果有多个，优先取 danbooru
+              for (let i = 1; i < ext_urls.length; i++) {
+                if (ext_urls[i].indexOf('danbooru') !== -1) url = ext_urls[i];
+              }
             }
             url = url.replace('http://', 'https://');
-            // 若为danbooru则获取来源
+            // 获取来源
             source = await getSource(url).catch(() => null);
           }
 
@@ -122,25 +141,29 @@ async function doSearch(imgURL, db, debug = false) {
           // 如果是本子
           if (doujinName) {
             doujinName = doujinName.replace('(English)', '');
-            const doujin = await nhentai(doujinName).catch(e => {
-              logError(`${global.getTime()} [error] nhentai`);
-              logError(e);
-              return false;
-            });
-            // 有本子搜索结果的话
-            if (doujin) {
-              thumbnail = `https://t.nhentai.net/galleries/${doujin.media_id}/cover.${exts[doujin.images.thumbnail.t]}`;
-              url = `https://nhentai.net/g/${doujin.id}/`;
-            } else {
-              success = false;
-              warnMsg +=
-                '没有在 nhentai 找到对应的本子，或者可能是此 query 因 bug 而无法在 nhentai 中获得搜索结果 _(:3」∠)_\n';
+            if (global.config.bot.getDojinDetailFromNhentai) {
+              const doujin = await nhentai(doujinName).catch(e => {
+                logError(`${global.getTime()} [error] nhentai`);
+                logError(e);
+                return false;
+              });
+              // 有本子搜索结果的话
+              if (doujin) {
+                thumbnail = `https://t.nhentai.net/galleries/${doujin.media_id}/cover.${
+                  exts[doujin.images.thumbnail.t]
+                }`;
+                url = `https://nhentai.net/g/${doujin.id}/`;
+              } else {
+                success = false;
+                warnMsg +=
+                  '没有在 nhentai 找到对应的本子，或者可能是此 query 因 bug 而无法在 nhentai 中获得搜索结果 _(:3」∠)_\n';
+              }
             }
             msg = await getShareText({
               url,
               title: `(${similarity}%) ${doujinName}`,
               thumbnail:
-                global.config.bot.hideImgWhenLowAcc && similarity < global.config.bot.saucenaoLowAcc ? null : thumbnail,
+                !(global.config.bot.hideImgWhenLowAcc && similarity < global.config.bot.saucenaoLowAcc) && thumbnail,
             });
           }
 
